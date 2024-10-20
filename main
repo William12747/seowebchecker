@@ -1,0 +1,82 @@
+import requests
+from bs4 import BeautifulSoup
+import csv
+import os
+from datetime import datetime
+
+def fetch_google_search_results(query, start_page):
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.51 Safari/537.36'}
+    url = f"https://www.google.com/search?q={query}&start={start_page}"
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        return response.text, None  # 正常情況下回傳內容和None代表無錯誤
+    else:
+        # 回傳具體錯誤代碼和錯誤訊息
+        print(f"Error fetching {query} on page {start_page//10 + 1}: HTTP {response.status_code}")
+        return None, response.status_code  # 回傳None作為html_content和錯誤代碼
+
+def find_website_ranking(html_content, target_website, page_number):
+    soup = BeautifulSoup(html_content, 'html.parser')
+    search_items = soup.find_all('div', class_='tF2Cxc')
+    results = []
+    for index, item in enumerate(search_items):
+        link = item.find('a', href=True)['href']
+        if target_website in link:
+            title = item.find('h3').text if item.find('h3') else 'No title'
+            # 計算實際的排名位置，加上當前頁數的偏移量
+            actual_rank = page_number * 10 + index + 1
+            results.append((actual_rank, link, title))
+    return results
+
+def get_unique_filename(base_name):
+    counter = 1
+    new_name = base_name
+    while os.path.exists(new_name):
+        new_name = f"{base_name[:-4]}_{counter}.csv"
+        counter += 1
+    return new_name
+
+def save_results_to_csv(results):
+    base_name = 'google_rankings.csv'
+    unique_filename = get_unique_filename(base_name)
+    with open(unique_filename, 'w', newline='', encoding='utf-8') as file:
+        writer = csv.writer(file)
+        writer.writerow(['Google 關鍵字', '搜尋排名', '網頁網址', '標題', '時間戳記'])
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        for result in results:
+            for rank, link, title in result[1]:
+                writer.writerow([result[0], rank, link, title, timestamp])
+    return unique_filename
+
+def main():
+    queries = [
+        '母親節行銷', '寵物行銷', '美妝行銷', '飯店行銷', '節慶行銷', '萬聖節行銷', '中秋節行銷', '端午節行銷', '父親節行銷', '新年行銷', '雙十一行銷',
+        '母親節創意企劃', '母親節企劃', '寵物創意企劃', '寵物企劃', '美妝創意企劃', '美妝企劃', '飯店創意企劃', '飯店企劃', '節慶創意企劃', '節慶企劃',
+        '萬聖節創意企劃', '萬聖節企劃', '中秋節創意企劃', '中秋節企劃', '端午節創意企劃', '端午節企劃', '父親節創意企劃', '父親節企劃', '新年創意企劃',
+        '新年企劃', '雙十一創意企劃', '雙十一企劃', '兒童節創意企劃', '兒童節企劃', '兒童節行銷',
+        '搜尋引擎優化', '搜尋引擎最佳化', 'SEO優化', 'SEO最佳化', '網站搜尋排序', '網站搜尋排名', '網站排序', '網站排名', 
+        'SEO策略', '關鍵字', '自然關鍵字', '反向連結', '反向連結網域', '爬蟲', '網路爬蟲', 'Googlebot', 'Yahoo Slurp', 
+        '搜尋引擎API', '黑帽SEO'
+    ]
+    target_website = 'https://koodata.com/'
+    all_results = []
+
+    for query in queries:
+        combined_results = []
+        for page in range(3):  # 循環通過三頁，頁碼從0開始
+            html_content, error_code = fetch_google_search_results(query, page * 10)
+            if html_content:
+                search_results = find_website_ranking(html_content, target_website, page)
+                combined_results.extend(search_results)
+            else:
+                # 加入錯誤代碼到結果中
+                combined_results.append((None, f'Error {error_code}', 'No results found'))
+
+        if combined_results:
+            all_results.append((query, combined_results))
+
+    filename = save_results_to_csv(all_results)
+    print(f"Results saved to {filename}")
+
+main()
